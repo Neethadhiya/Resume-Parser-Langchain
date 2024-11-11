@@ -13,6 +13,7 @@ import csv
 import streamlit as st
 import pandas as pd
 import shutil
+import logging
 
 # Load environment variables
 load_dotenv()
@@ -156,7 +157,7 @@ async def process_multiple_files(resume_directory: str, output_dir: str) -> Dict
     return results
 
 def json_to_csv(json_content: str, output_dir: str) -> None:
-    """Convert JSON string content to CSV file."""
+    """Convert JSON string content to CSV file with proper None handling."""
     try:
         # Parse the JSON string to Python object
         parsed_json = json.loads(json_content)
@@ -172,17 +173,26 @@ def json_to_csv(json_content: str, output_dir: str) -> None:
             if not file_exists:
                 writer.writerow(['Name', 'Email', 'Mobile', 'Experience', 'Skills'])
             
-            # Write data rows
+            # Write data rows with None handling
             for resume in parsed_json:
-                # Convert skills array to semicolon-separated string
-                skills_str = ';'.join(resume.get('skills', []))
-                # Clean up experience text (remove newlines)
-                experience = resume.get('experience', '').replace('\n', ' ')
+                # Handle None values for skills
+                skills = resume.get('skills', [])
+                if skills is None:
+                    skills = []
+                skills_str = ';'.join(str(skill) for skill in skills if skill is not None)
                 
+                # Handle None values for experience
+                experience = resume.get('experience', '')
+                if experience is not None:
+                    experience = str(experience).replace('\n', ' ')
+                else:
+                    experience = ''
+                
+                # Handle None values for all fields
                 writer.writerow([
-                    resume.get('name', ''),
-                    resume.get('email', ''),
-                    resume.get('mobile', ''),
+                    str(resume.get('name', '') or ''),
+                    str(resume.get('email', '') or ''),
+                    str(resume.get('mobile', '') or ''),
                     experience,
                     skills_str
                 ])
@@ -191,8 +201,10 @@ def json_to_csv(json_content: str, output_dir: str) -> None:
         
     except json.JSONDecodeError as e:
         print(f"Error parsing JSON: {str(e)}")
+        logging.error(f"JSON content causing error: {json_content}")
     except Exception as e:
         print(f"Error converting to CSV: {str(e)}")
+        logging.error(f"Resume data causing error: {parsed_json if 'parsed_json' in locals() else 'JSON not parsed'}")
 
 async def convert_md_to_json(file_path: str, output_dir: str) -> None:
     """Convert MD file to JSON using Claude API and save as CSV."""
